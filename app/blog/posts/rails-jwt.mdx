@@ -1,0 +1,124 @@
+---
+title: "Generating JWTs and Securing Endpoints with Redis and Ruby"
+publishedAt: "2024-12-15"
+summary: "Learn how to generate JSON Web Tokens (JWTs) in Ruby, store them in Redis, and use them to secure endpoints by validating user sessions."
+---
+
+## Introduction
+
+Before starting our short journey, you need to have Redis and Ruby on your machine.
+
+### Generating JWTs that Hold User IDs
+
+In order to generate JWTs in Ruby, I used the `ruby-jwt` gem. Here is how you can create one:
+
+```ruby
+def encode_jwt(user_id)
+    payload = { user_id: user_id, session_id: SecureRandom.hex(4) }
+    JWT.encode payload, 'my_secret', "HS256"
+end
+```
+
+`encode_jwt` is a function that accepts `user_id`, initializes the payload with it, and returns the generated token using the `encode` function from the JWT module.
+
+### Storing Generated Tokens in Redis
+
+After creating our token, we need to store it in Redis as sessions. First, initialize a Redis variable to make it globally accessible. To do this, add the `redis` gem to your Gemfile or install it with:
+
+```bash
+gem install redis
+```
+
+Next, create a file called `redis.rb` under `config/initializers` and define a global variable like this:
+
+```ruby
+$redis = Redis.new(url: ENV["REDIS_URL"] || "redis://localhost:6379/0", password: "password")
+```
+
+This initializes a Redis client instance with the given credentials. Now, store the token in Redis:
+
+```ruby
+def save_jwt_to_redis(user_id, jwt)
+    r_key = "user_#{user_id}_#{jwt}"
+    $redis.set(r_key, jwt)
+    $redis.expire(r_key, 30.days.to_i)
+end
+```
+
+The `save_jwt_to_redis` function creates a key (`r_key`) using `user_id` and `jwt`, then sets the JWT with this key in Redis. To ensure sessions expire, we use Redis’ `expire` function to set an expiration date for the unique key.
+
+## Putting It All Together
+
+Let’s register some users and hold their sessions using the functions defined above. Here’s the `create` function in our `UserController`:
+
+```ruby
+def create
+    user = User.new(user_params)
+    if user.save
+      token = encode_jwt(user.id)
+      save_jwt_to_redis(user.id, token)
+      render json: { success: true, token: token }, status: :created
+    else
+      render json: { success: false, errors: user.errors.messages }, status: :bad_request
+    end
+end
+```
+
+This initializes a user with the given `user_params`. If the save is successful, it generates a token and saves that token to Redis.
+
+### Securing Endpoints (Decoding Token and Fetching from Redis)
+
+Let’s secure some endpoints and restrict unauthorized access. We create a filter method called `auth_with_jwt` and call it before each secured endpoint:
+
+```ruby
+def auth_with_jwt
+    token = request.headers["Authorization"]&.split(" ")&.last || params[:token]
+    unless token
+      render json: { error: "JWT token not found." }, status: :unauthorized
+      return
+    end
+
+    begin
+      decoded = JWT.decode token, "my_secret", true, algorithm: "HS256"
+
+      user_id = decoded.first["user_id"]
+      jwt_token = get_jwt_from_redis(user_id, token)
+
+      unless jwt_token
+        raise JWT::DecodeError
+      end
+
+      @current_user = User.find(user_id)
+
+    rescue JWT::DecodeError => e
+      logger.error "#{e.message}"
+      render json: { error: "Invalid JWT token." }, status: :unauthorized
+    rescue JWT::ExpiredSignature => e
+      logger.error "#{e.message}"
+      render json: { error: "Expired JWT token." }, status: :unauthorized
+    rescue JWT::InvalidIssuerError => e
+      render json: { error: "Invalid JWT issuer." }, status: :unauthorized
+    rescue JWT::InvalidAudError => e
+      render json: { error: "Invalid JWT audience." }, status: :unauthorized
+    rescue ActiveRecord::RecordNotFound => e
+      render json: { error: "User not found." }, status: :not_found
+    end
+end
+```
+
+This function extracts the token from the `Authorization` header, decodes it to retrieve the `user_id`, and fetches the token from the Redis session. If a token exists, it sets the `@current_user`; otherwise, it raises an error.
+
+Here’s how the `get_jwt_from_redis` function works:
+
+```ruby
+def get_jwt_from_redis(user_id, jwt)
+    r_key = "user_#{user_id}_#{jwt}"
+    $redis.get(r_key)
+end
+```
+
+We use the same key format as in `save_jwt_to_redis` to match keys and fetch the value (token) from Redis. If the key doesn’t exist or has expired, it returns `nil`, and the user cannot be authorized.
+
+## Conclusion
+
+Unfortunately, our journey ends here. Thank you for reading! I’ll be waiting for your questions and feedback. 🎉

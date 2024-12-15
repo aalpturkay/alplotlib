@@ -11,16 +11,18 @@ import { baseUrl } from "./sitemap";
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
   title: {
-    default: "Next.js Portfolio Starter",
-    template: "%s | Next.js Portfolio Starter",
+    default: "Alplotlib Blog ve Portfolio",
+    template: "%s | Alplotlib",
   },
-  description: "This is my portfolio.",
+  description:
+    "Alplotlib'e hoş geldiniz - bilgi, projeler ve fikirlerin paylaşıldığı bir alan.",
   openGraph: {
-    title: "My Portfolio",
-    description: "This is my portfolio.",
+    title: "Alplotlib Blog ve Portfolio",
+    description:
+      "Alplotlib'in blog yazılarını, projelerini ve kişisel Portfolioünü keşfedin.",
     url: baseUrl,
-    siteName: "My Portfolio",
-    locale: "en_US",
+    siteName: "Alplotlib",
+    locale: "tr_TR",
     type: "website",
   },
   robots: {
