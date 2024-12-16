@@ -63,7 +63,7 @@ export default function RootLayout({
           <Analytics />
           <SpeedInsights />
         </main>
-        <GoogleAnalytics gaId="GTM-58PSGTSX" />
+        <GoogleAnalytics gaId="G-58PSGTSX" />
       </body>
     </html>
   );
